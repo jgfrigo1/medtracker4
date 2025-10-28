@@ -5,10 +5,26 @@ import type { HealthData, DailyData, StandardPattern } from '../types';
 // It uses localStorage to persist data, but simulates asynchronicity.
 
 // --- MOCK DATABASE ---
-const MOCK_USERS: Record<string, string> = {
-    'user1': 'salud1',
-    'user2': 'salud2',
+const USERS_STORAGE_KEY = 'healthTracker_users';
+
+const initializeUsers = (): Record<string, string> => {
+    const storedUsers = localStorage.getItem(USERS_STORAGE_KEY);
+    if (storedUsers) {
+        return JSON.parse(storedUsers);
+    }
+    const defaultUsers = {
+        'user1': 'salud1',
+        'user2': 'salud2',
+    };
+    localStorage.setItem(USERS_STORAGE_KEY, JSON.stringify(defaultUsers));
+    return defaultUsers;
 };
+
+let MOCK_USERS = initializeUsers();
+
+const saveUsers = () => {
+    localStorage.setItem(USERS_STORAGE_KEY, JSON.stringify(MOCK_USERS));
+}
 
 const SIMULATED_LATENCY = 300; // ms
 
@@ -24,6 +40,60 @@ export const api = {
                     resolve({ username });
                 } else {
                     resolve(null);
+                }
+            }, SIMULATED_LATENCY);
+        });
+    },
+
+    getUsers: async (): Promise<string[]> => {
+        return new Promise((resolve) => {
+            setTimeout(() => {
+                resolve(Object.keys(MOCK_USERS));
+            }, SIMULATED_LATENCY);
+        });
+    },
+
+    addUser: async (username: string, password: string): Promise<{ success: boolean; message?: string }> => {
+        return new Promise((resolve) => {
+            setTimeout(() => {
+                if (MOCK_USERS[username]) {
+                    resolve({ success: false, message: 'El nombre de usuario ya existe.' });
+                } else {
+                    MOCK_USERS[username] = password;
+                    saveUsers();
+                    resolve({ success: true });
+                }
+            }, SIMULATED_LATENCY);
+        });
+    },
+
+    updateUserPassword: async (username: string, newPassword: string): Promise<boolean> => {
+        return new Promise((resolve) => {
+            setTimeout(() => {
+                if (MOCK_USERS[username]) {
+                    MOCK_USERS[username] = newPassword;
+                    saveUsers();
+                    resolve(true);
+                } else {
+                    resolve(false);
+                }
+            }, SIMULATED_LATENCY);
+        });
+    },
+
+    deleteUser: async (username: string): Promise<boolean> => {
+        return new Promise((resolve) => {
+            setTimeout(() => {
+                if (MOCK_USERS[username]) {
+                    delete MOCK_USERS[username];
+                    saveUsers();
+                    // Also delete user's data
+                    localStorage.removeItem(getStorageKey('healthData', username));
+                    localStorage.removeItem(getStorageKey('medications', username));
+                    localStorage.removeItem(getStorageKey('standardPattern', username));
+                    resolve(true);
+                } else {
+                    resolve(false);
                 }
             }, SIMULATED_LATENCY);
         });
@@ -100,5 +170,33 @@ export const api = {
                 }
             }, SIMULATED_LATENCY);
         });
-    }
+    },
+
+    exportUserData: async (username: string): Promise<{ healthData: HealthData, medications: string[], standardPattern: StandardPattern }> => {
+        return new Promise(async (resolve) => {
+            const [healthData, medications, standardPattern] = await Promise.all([
+                api.getHealthData(username),
+                api.getMedications(username),
+                api.getStandardPattern(username)
+            ]);
+            resolve({ healthData, medications, standardPattern });
+        });
+    },
+
+    importUserData: async (username: string, data: { healthData: HealthData, medications: string[], standardPattern: StandardPattern }): Promise<boolean> => {
+        return new Promise(async (resolve) => {
+            setTimeout(() => {
+                try {
+                    // Overwrite all data for the user
+                    localStorage.setItem(getStorageKey('healthData', username), JSON.stringify(data.healthData || {}));
+                    localStorage.setItem(getStorageKey('medications', username), JSON.stringify(data.medications || []));
+                    localStorage.setItem(getStorageKey('standardPattern', username), JSON.stringify(data.standardPattern || {}));
+                    resolve(true);
+                } catch (e) {
+                    console.error("Failed to import user data", e);
+                    resolve(false);
+                }
+            }, SIMULATED_LATENCY);
+        });
+    },
 };
