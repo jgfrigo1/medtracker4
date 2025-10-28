@@ -23,7 +23,7 @@ export default function DataManagement() {
         if (!currentUser) return;
         setIsExporting(true);
         try {
-            const data = await api.exportUserData(currentUser.username);
+            const data = await api.exportUserData();
             const jsonString = JSON.stringify(data, null, 2);
             const blob = new Blob([jsonString], { type: 'application/json' });
             const url = URL.createObjectURL(blob);
@@ -75,7 +75,7 @@ export default function DataManagement() {
         if (!parsedData || !currentUser) return;
 
         const confirmation = window.confirm(
-            '¿Está seguro de que desea importar estos datos?\n\nATENCIÓN: Esta acción sobrescribirá permanentemente todos los datos de salud, medicamentos y patrones existentes para su usuario en ESTE NAVEGADOR. Esta acción no se puede deshacer.'
+            '¿Está seguro de que desea importar estos datos?\n\nATENCIÓN: Esta acción sobrescribirá permanentemente todos los datos de salud, medicamentos y patrones existentes para su usuario. Esta acción no se puede deshacer.'
         );
 
         if (confirmation) {
@@ -84,7 +84,7 @@ export default function DataManagement() {
             try {
                 // The API expects a specific shape, but we validated the keys exist.
                 // We cast to `any` to satisfy the type-checker for the import function.
-                const success = await api.importUserData(currentUser.username, parsedData as any);
+                const success = await api.importUserData(parsedData as any);
                 if (success) {
                     setImportSuccess('Datos importados con éxito. La aplicación se recargará para aplicar los cambios.');
                     setTimeout(() => {
@@ -106,7 +106,7 @@ export default function DataManagement() {
         <div className="bg-white p-6 rounded-lg shadow-sm border border-slate-200 max-w-2xl mx-auto">
             <h2 className="text-xl font-bold text-slate-700 mb-2">Gestionar Datos</h2>
             <p className="text-sm text-slate-500 mb-6">
-                Como esta aplicación guarda los datos en su navegador, no se sincronizan automáticamente. Use estas herramientas para mover sus datos entre navegadores o para crear una copia de seguridad.
+                Use estas herramientas para mover sus datos entre dispositivos o para crear una copia de seguridad.
             </p>
 
             {/* Export Section */}
@@ -133,7 +133,7 @@ export default function DataManagement() {
                         <div>
                             <p className="font-bold text-red-700">Atención</p>
                             <p className="text-sm text-red-600">
-                                La importación de datos <strong className="font-semibold">sobrescribirá permanentemente</strong> todos los datos existentes para su usuario en este navegador.
+                                La importación de datos <strong className="font-semibold">sobrescribirá permanentemente</strong> todos los datos existentes para su usuario.
                             </p>
                         </div>
                     </div>

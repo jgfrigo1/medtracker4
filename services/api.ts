@@ -1,202 +1,196 @@
 import type { HealthData, DailyData, StandardPattern } from '../types';
 
-// This is a mock API service to simulate a backend.
-// In a real application, this would make HTTP requests to a server.
-// It uses localStorage to persist data, but simulates asynchronicity.
+// Replace with your actual Render.com backend URL
+const API_BASE_URL = 'https://health-monitor-backend.onrender.com/api'; 
+const TOKEN_KEY = 'healthTracker_authToken';
 
-// --- MOCK DATABASE ---
-const USERS_STORAGE_KEY = 'healthTracker_users';
-
-const initializeUsers = (): Record<string, string> => {
-    const storedUsers = localStorage.getItem(USERS_STORAGE_KEY);
-    if (storedUsers) {
-        return JSON.parse(storedUsers);
-    }
-    const defaultUsers = {
-        'user1': 'salud1',
-        'user2': 'salud2',
-    };
-    localStorage.setItem(USERS_STORAGE_KEY, JSON.stringify(defaultUsers));
-    return defaultUsers;
+// --- Token Management ---
+const getToken = (): string | null => {
+    return localStorage.getItem(TOKEN_KEY);
 };
 
-let MOCK_USERS = initializeUsers();
+const setToken = (token: string): void => {
+    localStorage.setItem(TOKEN_KEY, token);
+};
 
-const saveUsers = () => {
-    localStorage.setItem(USERS_STORAGE_KEY, JSON.stringify(MOCK_USERS));
-}
+const removeToken = (): void => {
+    localStorage.removeItem(TOKEN_KEY);
+};
 
-const SIMULATED_LATENCY = 300; // ms
+// --- API Wrapper ---
+const apiRequest = async (endpoint: string, options: RequestInit = {}) => {
+    const token = getToken();
+    const headers: HeadersInit = {
+        'Content-Type': 'application/json',
+        ...options.headers,
+    };
 
-const getStorageKey = (base: string, username: string) => `healthTracker_${base}_${username}`;
+    if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+    }
+
+    const response = await fetch(`${API_BASE_URL}${endpoint}`, {
+        ...options,
+        headers,
+    });
+
+    if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ message: response.statusText }));
+        throw new Error(errorData.message || 'An API error occurred');
+    }
+    
+    if (response.status === 204) { // For "No Content" responses
+        return null;
+    }
+
+    return response.json();
+};
 
 // --- API FUNCTIONS ---
 
 export const api = {
     login: async (username: string, password: string): Promise<{ username: string } | null> => {
-        return new Promise((resolve) => {
-            setTimeout(() => {
-                if (MOCK_USERS[username] && MOCK_USERS[username] === password) {
-                    resolve({ username });
-                } else {
-                    resolve(null);
-                }
-            }, SIMULATED_LATENCY);
-        });
+        try {
+            const data = await apiRequest('/auth/login', {
+                method: 'POST',
+                body: JSON.stringify({ username, password }),
+            });
+            if (data && data.token) {
+                setToken(data.token);
+                return { username: data.user.username };
+            }
+            return null;
+        } catch (error) {
+            console.error('Login failed:', error);
+            return null;
+        }
+    },
+
+    logout: () => {
+        removeToken();
     },
 
     getUsers: async (): Promise<string[]> => {
-        return new Promise((resolve) => {
-            setTimeout(() => {
-                resolve(Object.keys(MOCK_USERS));
-            }, SIMULATED_LATENCY);
-        });
+        return apiRequest('/users');
     },
 
     addUser: async (username: string, password: string): Promise<{ success: boolean; message?: string }> => {
-        return new Promise((resolve) => {
-            setTimeout(() => {
-                if (MOCK_USERS[username]) {
-                    resolve({ success: false, message: 'El nombre de usuario ya existe.' });
-                } else {
-                    MOCK_USERS[username] = password;
-                    saveUsers();
-                    resolve({ success: true });
-                }
-            }, SIMULATED_LATENCY);
-        });
+        try {
+            await apiRequest('/auth/register', {
+                method: 'POST',
+                body: JSON.stringify({ username, password }),
+            });
+            return { success: true };
+        } catch (error: any) {
+            return { success: false, message: error.message };
+        }
     },
 
     updateUserPassword: async (username: string, newPassword: string): Promise<boolean> => {
-        return new Promise((resolve) => {
-            setTimeout(() => {
-                if (MOCK_USERS[username]) {
-                    MOCK_USERS[username] = newPassword;
-                    saveUsers();
-                    resolve(true);
-                } else {
-                    resolve(false);
-                }
-            }, SIMULATED_LATENCY);
-        });
+        try {
+            await apiRequest(`/users/${username}/password`, {
+                method: 'PUT',
+                body: JSON.stringify({ password: newPassword }),
+            });
+            return true;
+        } catch (error) {
+            return false;
+        }
     },
 
     deleteUser: async (username: string): Promise<boolean> => {
-        return new Promise((resolve) => {
-            setTimeout(() => {
-                if (MOCK_USERS[username]) {
-                    delete MOCK_USERS[username];
-                    saveUsers();
-                    // Also delete user's data
-                    localStorage.removeItem(getStorageKey('healthData', username));
-                    localStorage.removeItem(getStorageKey('medications', username));
-                    localStorage.removeItem(getStorageKey('standardPattern', username));
-                    resolve(true);
-                } else {
-                    resolve(false);
-                }
-            }, SIMULATED_LATENCY);
-        });
+        try {
+            await apiRequest(`/users/${username}`, { method: 'DELETE' });
+            return true;
+        } catch(error) {
+            return false;
+        }
     },
 
-    getHealthData: async (username: string): Promise<HealthData> => {
-        return new Promise((resolve) => {
-            setTimeout(() => {
-                const data = localStorage.getItem(getStorageKey('healthData', username));
-                resolve(data ? JSON.parse(data) : {});
-            }, SIMULATED_LATENCY);
-        });
+    getAllData: async (): Promise<{ healthData: HealthData, medications: string[], standardPattern: StandardPattern }> => {
+        return apiRequest('/data');
     },
 
-    saveHealthData: async (username: string, date: string, data: DailyData): Promise<boolean> => {
-        return new Promise((resolve) => {
-            setTimeout(() => {
-                try {
-                    const existingDataStr = localStorage.getItem(getStorageKey('healthData', username));
-                    const existingData = existingDataStr ? JSON.parse(existingDataStr) : {};
-                    const newData = { ...existingData, [date]: data };
-                    localStorage.setItem(getStorageKey('healthData', username), JSON.stringify(newData));
-                    resolve(true);
-                } catch (e) {
-                    console.error("Failed to save health data", e);
-                    resolve(false);
-                }
-            }, SIMULATED_LATENCY);
-        });
+    saveHealthData: async (date: string, data: DailyData): Promise<boolean> => {
+        try {
+            await apiRequest(`/data/health-data/${date}`, {
+                method: 'POST',
+                body: JSON.stringify(data),
+            });
+            return true;
+        } catch (error) {
+            console.error("Failed to save health data", error);
+            return false;
+        }
     },
 
-    getMedications: async (username: string): Promise<string[]> => {
-         return new Promise((resolve) => {
-            setTimeout(() => {
-                const data = localStorage.getItem(getStorageKey('medications', username));
-                // Provide default meds for new users
-                resolve(data ? JSON.parse(data) : ['Paracetamol 1g', 'Ibuprofeno 600mg']);
-            }, SIMULATED_LATENCY);
-        });
-    },
-
-    saveMedications: async (username: string, medications: string[]): Promise<boolean> => {
-        return new Promise((resolve) => {
-            setTimeout(() => {
-                try {
-                    localStorage.setItem(getStorageKey('medications', username), JSON.stringify(medications));
-                    resolve(true);
-                } catch (e) {
-                    console.error("Failed to save medications", e);
-                    resolve(false);
-                }
-            }, SIMULATED_LATENCY);
-        });
+    addMedication: async (medication: string): Promise<boolean> => {
+        try {
+            await apiRequest('/medications', {
+                method: 'POST',
+                body: JSON.stringify({ medication }),
+            });
+            return true;
+        } catch (error) {
+            console.error("Failed to add medication", error);
+            return false;
+        }
     },
     
-    getStandardPattern: async (username: string): Promise<StandardPattern> => {
-        return new Promise((resolve) => {
-            setTimeout(() => {
-                const data = localStorage.getItem(getStorageKey('standardPattern', username));
-                resolve(data ? JSON.parse(data) : {});
-            }, SIMULATED_LATENCY);
-        });
+    editMedication: async (oldMed: string, newMed: string): Promise<boolean> => {
+        try {
+            const encodedOldMed = encodeURIComponent(oldMed);
+            await apiRequest(`/medications/${encodedOldMed}`, {
+                method: 'PUT',
+                body: JSON.stringify({ medication: newMed }),
+            });
+            return true;
+        } catch (error) {
+            console.error("Failed to edit medication", error);
+            return false;
+        }
+    },
+    
+    deleteMedication: async (medication: string): Promise<boolean> => {
+        try {
+            const encodedMed = encodeURIComponent(medication);
+            await apiRequest(`/medications/${encodedMed}`, {
+                method: 'DELETE',
+            });
+            return true;
+        } catch (error) {
+            console.error("Failed to delete medication", error);
+            return false;
+        }
     },
 
-    saveStandardPattern: async (username: string, pattern: StandardPattern): Promise<boolean> => {
-        return new Promise((resolve) => {
-            setTimeout(() => {
-                try {
-                    localStorage.setItem(getStorageKey('standardPattern', username), JSON.stringify(pattern));
-                    resolve(true);
-                } catch(e) {
-                    console.error("Failed to save standard pattern", e);
-                    resolve(false);
-                }
-            }, SIMULATED_LATENCY);
-        });
+    saveStandardPattern: async (pattern: StandardPattern): Promise<boolean> => {
+        try {
+            await apiRequest('/data/standard-pattern', {
+                method: 'POST',
+                body: JSON.stringify(pattern),
+            });
+            return true;
+        } catch(e) {
+            console.error("Failed to save standard pattern", e);
+            return false;
+        }
     },
 
-    exportUserData: async (username: string): Promise<{ healthData: HealthData, medications: string[], standardPattern: StandardPattern }> => {
-        return new Promise(async (resolve) => {
-            const [healthData, medications, standardPattern] = await Promise.all([
-                api.getHealthData(username),
-                api.getMedications(username),
-                api.getStandardPattern(username)
-            ]);
-            resolve({ healthData, medications, standardPattern });
-        });
+    exportUserData: async (): Promise<{ healthData: HealthData, medications: string[], standardPattern: StandardPattern }> => {
+        return apiRequest('/data/export');
     },
 
-    importUserData: async (username: string, data: { healthData: HealthData, medications: string[], standardPattern: StandardPattern }): Promise<boolean> => {
-        return new Promise(async (resolve) => {
-            setTimeout(() => {
-                try {
-                    // Overwrite all data for the user
-                    localStorage.setItem(getStorageKey('healthData', username), JSON.stringify(data.healthData || {}));
-                    localStorage.setItem(getStorageKey('medications', username), JSON.stringify(data.medications || []));
-                    localStorage.setItem(getStorageKey('standardPattern', username), JSON.stringify(data.standardPattern || {}));
-                    resolve(true);
-                } catch (e) {
-                    console.error("Failed to import user data", e);
-                    resolve(false);
-                }
-            }, SIMULATED_LATENCY);
-        });
+    importUserData: async (data: { healthData: HealthData, medications: string[], standardPattern: StandardPattern }): Promise<boolean> => {
+        try {
+            await apiRequest('/data/import', {
+                method: 'POST',
+                body: JSON.stringify(data),
+            });
+            return true;
+        } catch (error) {
+            console.error("Failed to import user data", error);
+            return false;
+        }
     },
 };
