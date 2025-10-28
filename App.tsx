@@ -47,14 +47,6 @@ export default function App() {
     }
 
     const renderView = () => {
-        if (isLoading && !healthData) { // Show loading indicator only on initial load
-             return (
-                <div className="flex items-center justify-center h-full text-slate-500">
-                    <p>Cargando datos del usuario...</p>
-                </div>
-            );
-        }
-        
         switch (view) {
             case 'medications':
                 return <MedicationManager />;
