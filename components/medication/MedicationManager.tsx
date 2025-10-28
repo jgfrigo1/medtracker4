@@ -1,35 +1,46 @@
-
 import React, { useState } from 'react';
 import { useAppContext } from '../../context/AppContext';
-import { Plus, Edit, Trash2 } from 'lucide-react';
+import { Plus, Edit, Trash2, Check } from 'lucide-react';
 
 export default function MedicationManager() {
-    const { medications, addMedication, editMedication, deleteMedication } = useAppContext();
+    const { medications, addMedication, editMedication, deleteMedication, isLoading } = useAppContext();
     const [newMed, setNewMed] = useState('');
     const [editingMed, setEditingMed] = useState<string | null>(null);
     const [editText, setEditText] = useState('');
+    const [isSaving, setIsSaving] = useState(false);
 
-    const handleAdd = () => {
+    const handleAdd = async () => {
         if (newMed.trim() && !medications.includes(newMed.trim())) {
-            addMedication(newMed.trim());
+            setIsSaving(true);
+            await addMedication(newMed.trim());
             setNewMed('');
+            setIsSaving(false);
         }
     };
 
-    const handleEdit = (med: string) => {
+    const handleEdit = async (med: string) => {
         if (editText.trim() && editText.trim() !== med) {
-            editMedication(med, editText.trim());
-            setEditingMed(null);
-            setEditText('');
-        } else {
-            setEditingMed(null);
-            setEditText('');
+            setIsSaving(true);
+            await editMedication(med, editText.trim());
+            setIsSaving(false);
         }
+        setEditingMed(null);
+        setEditText('');
     };
     
+    const handleDelete = async (med: string) => {
+        setIsSaving(true);
+        await deleteMedication(med);
+        setIsSaving(false);
+    }
+
     const startEditing = (med: string) => {
         setEditingMed(med);
         setEditText(med);
+    }
+    
+    if (isLoading) {
+        return <div className="text-center p-8">Cargando medicamentos...</div>
     }
 
     return (
@@ -41,33 +52,42 @@ export default function MedicationManager() {
                     type="text"
                     value={newMed}
                     onChange={(e) => setNewMed(e.target.value)}
+                    onKeyDown={(e) => e.key === 'Enter' && handleAdd()}
                     placeholder="Añadir nuevo medicamento"
                     className="flex-grow p-2 border border-slate-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
+                    disabled={isSaving}
                 />
-                <button onClick={handleAdd} className="px-4 py-2 font-semibold text-white bg-blue-600 rounded-lg hover:bg-blue-700 flex items-center gap-2">
+                <button onClick={handleAdd} disabled={isSaving || !newMed.trim()} className="px-4 py-2 font-semibold text-white bg-blue-600 rounded-lg hover:bg-blue-700 flex items-center gap-2 disabled:bg-blue-400">
                     <Plus size={16}/> Añadir
                 </button>
             </div>
 
             <div className="space-y-3">
                 {medications.length > 0 ? medications.map(med => (
-                    <div key={med} className="flex items-center justify-between p-3 bg-slate-50 rounded-lg">
+                    <div key={med} className="flex items-center justify-between p-3 bg-slate-50 rounded-lg min-h-[52px]">
                         {editingMed === med ? (
-                            <input
+                             <input
                                 type="text"
                                 value={editText}
                                 onChange={(e) => setEditText(e.target.value)}
-                                onBlur={() => handleEdit(med)}
                                 onKeyDown={(e) => e.key === 'Enter' && handleEdit(med)}
                                 autoFocus
+                                onBlur={() => handleEdit(med)}
                                 className="flex-grow p-1 border-b-2 border-blue-500 focus:outline-none bg-transparent"
+                                disabled={isSaving}
                             />
                         ) : (
                             <span className="text-slate-800">{med}</span>
                         )}
                         <div className="flex gap-2">
-                            <button onClick={() => startEditing(med)} className="p-2 text-slate-500 hover:text-blue-600 hover:bg-slate-200 rounded-full"><Edit size={16}/></button>
-                            <button onClick={() => deleteMedication(med)} className="p-2 text-slate-500 hover:text-red-600 hover:bg-slate-200 rounded-full"><Trash2 size={16}/></button>
+                             {editingMed === med ? (
+                                <button onClick={() => handleEdit(med)} disabled={isSaving} className="p-2 text-slate-500 hover:text-green-600 hover:bg-slate-200 rounded-full"><Check size={16}/></button>
+                             ) : (
+                                <>
+                                <button onClick={() => startEditing(med)} disabled={isSaving} className="p-2 text-slate-500 hover:text-blue-600 hover:bg-slate-200 rounded-full"><Edit size={16}/></button>
+                                <button onClick={() => handleDelete(med)} disabled={isSaving} className="p-2 text-slate-500 hover:text-red-600 hover:bg-slate-200 rounded-full"><Trash2 size={16}/></button>
+                                </>
+                             )}
                         </div>
                     </div>
                 )) : (

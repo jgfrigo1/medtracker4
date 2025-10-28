@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { useAppContext } from '../../context/AppContext';
 import { TIME_SLOTS } from '../../constants';
@@ -21,21 +20,20 @@ const createInitialData = (): DailyData => {
 export default function DataInputForm({ selectedDate }: DataInputFormProps) {
     const { healthData, updateHealthData, medications, standardPattern } = useAppContext();
     const [dailyData, setDailyData] = useState<DailyData>(createInitialData());
+    const [isSaving, setIsSaving] = useState(false);
     const [showSuccess, setShowSuccess] = useState(false);
 
     useEffect(() => {
         const existingData = healthData[selectedDate];
+        const fullData = createInitialData();
         if (existingData) {
-            const fullData = createInitialData();
             Object.keys(existingData).forEach(time => {
                 if (fullData[time]) {
-                    fullData[time] = existingData[time];
+                    fullData[time] = { ...defaultTimeSlotData, ...existingData[time] };
                 }
             });
-            setDailyData(fullData);
-        } else {
-            setDailyData(createInitialData());
         }
+        setDailyData(fullData);
     }, [selectedDate, healthData]);
 
     const handleValueChange = <K extends keyof TimeSlotData>(time: string, field: K, value: TimeSlotData[K]) => {
@@ -58,8 +56,10 @@ export default function DataInputForm({ selectedDate }: DataInputFormProps) {
         }));
     };
 
-    const handleSave = () => {
-        updateHealthData(selectedDate, dailyData);
+    const handleSave = async () => {
+        setIsSaving(true);
+        await updateHealthData(selectedDate, dailyData);
+        setIsSaving(false);
         setShowSuccess(true);
         setTimeout(() => setShowSuccess(false), 2000);
     };
@@ -69,7 +69,10 @@ export default function DataInputForm({ selectedDate }: DataInputFormProps) {
             const newData = { ...prevData };
             Object.keys(standardPattern).forEach(time => {
                 if (newData[time]) {
-                    newData[time] = { ...newData[time], medications: [...standardPattern[time]] };
+                    // Combine existing meds with pattern, avoiding duplicates
+                    const existingMeds = new Set(newData[time].medications);
+                    standardPattern[time].forEach(med => existingMeds.add(med));
+                    newData[time] = { ...newData[time], medications: Array.from(existingMeds) };
                 }
             });
             return newData;
@@ -80,7 +83,7 @@ export default function DataInputForm({ selectedDate }: DataInputFormProps) {
         <div className="space-y-4">
             <div className="max-h-[60vh] overflow-y-auto pr-2 -mr-2">
                 <table className="w-full text-sm text-left">
-                     <thead className="text-xs text-slate-500 uppercase bg-slate-50 sticky top-0">
+                     <thead className="text-xs text-slate-500 uppercase bg-slate-50 sticky top-0 z-[1]">
                         <tr>
                             <th scope="col" className="px-3 py-3 w-1/6">Hora</th>
                             <th scope="col" className="px-3 py-3 w-1/6">Valor (0-10)</th>
@@ -97,6 +100,7 @@ export default function DataInputForm({ selectedDate }: DataInputFormProps) {
                                         type="number"
                                         min="0"
                                         max="10"
+                                        step="1"
                                         value={dailyData[time]?.value ?? ''}
                                         onChange={(e) => handleValueChange(time, 'value', e.target.value === '' ? null : Number(e.target.value))}
                                         className="w-full p-2 border border-slate-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
@@ -131,8 +135,12 @@ export default function DataInputForm({ selectedDate }: DataInputFormProps) {
                 <button onClick={applyStandardPattern} className="px-4 py-2 text-sm font-semibold text-slate-700 bg-slate-100 rounded-lg hover:bg-slate-200 flex items-center gap-2 transition-colors">
                     <ClipboardPaste size={16}/> Aplicar Patrón
                 </button>
-                <button onClick={handleSave} className="px-4 py-2 text-sm font-semibold text-white bg-blue-600 rounded-lg hover:bg-blue-700 flex items-center gap-2 transition-colors">
-                    <Save size={16}/> Guardar Cambios
+                <button 
+                    onClick={handleSave} 
+                    disabled={isSaving}
+                    className="px-4 py-2 text-sm font-semibold text-white bg-blue-600 rounded-lg hover:bg-blue-700 flex items-center gap-2 transition-colors disabled:bg-blue-400 disabled:cursor-not-allowed"
+                >
+                    <Save size={16}/> {isSaving ? 'Guardando...' : 'Guardar Cambios'}
                 </button>
             </div>
         </div>

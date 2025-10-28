@@ -1,44 +1,80 @@
-
-import React, { createContext, useContext, ReactNode } from 'react';
+import React, { createContext, useContext, ReactNode, useState, useEffect, useCallback } from 'react';
 import { useLocalStorage } from '../hooks/useLocalStorage';
-// Fix: Import DailyData to correctly type the updateHealthData function parameter.
-import type { AppContextType, HealthData, StandardPattern, DailyData } from '../types';
-import { APP_PASSWORD, LOCAL_STORAGE_KEYS } from '../constants';
+import { api } from '../services/api';
+import type { AppContextType, HealthData, StandardPattern, DailyData, User } from '../types';
+import { LOCAL_STORAGE_KEYS } from '../constants';
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
 export const AppProvider = ({ children }: { children: ReactNode }) => {
-    const [isAuthenticated, setIsAuthenticated] = useLocalStorage<boolean>(LOCAL_STORAGE_KEYS.IS_AUTHENTICATED, false);
-    const [healthData, setHealthData] = useLocalStorage<HealthData>(LOCAL_STORAGE_KEYS.HEALTH_DATA, {});
-    const [medications, setMedications] = useLocalStorage<string[]>(LOCAL_STORAGE_KEYS.MEDICATIONS, ['Paracetamol 1g', 'Ibuprofeno 600mg']);
-    const [standardPattern, setStandardPattern] = useLocalStorage<StandardPattern>(LOCAL_STORAGE_KEYS.STANDARD_PATTERN, {});
+    const [currentUser, setCurrentUser] = useLocalStorage<User | null>(LOCAL_STORAGE_KEYS.IS_AUTHENTICATED, null);
+    const [healthData, setHealthData] = useState<HealthData>({});
+    const [medications, setMedications] = useState<string[]>([]);
+    const [standardPattern, setStandardPattern] = useState<StandardPattern>({});
+    const [isLoading, setIsLoading] = useState(true);
 
-    const login = (password: string): boolean => {
-        if (password === APP_PASSWORD) {
-            setIsAuthenticated(true);
+    const fetchData = useCallback(async () => {
+        if (!currentUser) {
+            setIsLoading(false);
+            setHealthData({});
+            setMedications([]);
+            setStandardPattern({});
+            return;
+        }
+        setIsLoading(true);
+        try {
+            const [healthDataRes, medicationsRes, standardPatternRes] = await Promise.all([
+                api.getHealthData(currentUser.username),
+                api.getMedications(currentUser.username),
+                api.getStandardPattern(currentUser.username),
+            ]);
+            setHealthData(healthDataRes);
+            setMedications(medicationsRes);
+            setStandardPattern(standardPatternRes);
+        } catch (error) {
+            console.error("Failed to fetch data", error);
+        } finally {
+            setIsLoading(false);
+        }
+    }, [currentUser]);
+
+    useEffect(() => {
+        fetchData();
+    }, [fetchData]);
+
+    const login = async (username: string, password: string): Promise<boolean> => {
+        const user = await api.login(username, password);
+        if (user) {
+            setCurrentUser(user);
             return true;
         }
         return false;
     };
 
     const logout = () => {
-        setIsAuthenticated(false);
+        setCurrentUser(null);
     };
 
-    // Fix: Correctly type the `data` parameter as `DailyData` instead of `any`.
-    const updateHealthData = (date: string, data: DailyData) => {
-        setHealthData(prevData => ({ ...prevData, [date]: data }));
+    const updateHealthData = async (date: string, data: DailyData) => {
+        if (!currentUser) return;
+        setHealthData(prevData => ({ ...prevData, [date]: data })); // Optimistic update
+        await api.saveHealthData(currentUser.username, date, data);
     };
-
-    const addMedication = (med: string) => {
+    
+    const addMedication = async (med: string) => {
+        if (!currentUser) return;
         if (!medications.includes(med)) {
-            setMedications([...medications, med]);
+            const newMeds = [...medications, med];
+            setMedications(newMeds);
+            await api.saveMedications(currentUser.username, newMeds);
         }
     };
 
-    const editMedication = (oldMed: string, newMed: string) => {
-        setMedications(medications.map(m => (m === oldMed ? newMed : m)));
-        // Also update in healthData and standardPattern
+    const editMedication = async (oldMed: string, newMed: string) => {
+        if (!currentUser) return;
+        const newMeds = medications.map(m => (m === oldMed ? newMed : m));
+        setMedications(newMeds);
+        
         const newHealthData = { ...healthData };
         Object.keys(newHealthData).forEach(date => {
             Object.keys(newHealthData[date]).forEach(time => {
@@ -49,6 +85,8 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
             });
         });
         setHealthData(newHealthData);
+        // Persist all changes
+        const healthDataPromises = Object.entries(newHealthData).map(([date, data]) => api.saveHealthData(currentUser.username, date, data));
 
         const newStandardPattern = { ...standardPattern };
         Object.keys(newStandardPattern).forEach(time => {
@@ -58,11 +96,19 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
             }
         });
         setStandardPattern(newStandardPattern);
+
+        await Promise.all([
+            api.saveMedications(currentUser.username, newMeds),
+            api.saveStandardPattern(currentUser.username, newStandardPattern),
+            ...healthDataPromises
+        ]);
     };
 
-    const deleteMedication = (medToDelete: string) => {
-        setMedications(medications.filter(med => med !== medToDelete));
-        // Also remove from healthData and standardPattern
+    const deleteMedication = async (medToDelete: string) => {
+        if (!currentUser) return;
+        const newMeds = medications.filter(med => med !== medToDelete);
+        setMedications(newMeds);
+        
         const newHealthData = { ...healthData };
         Object.keys(newHealthData).forEach(date => {
             Object.keys(newHealthData[date]).forEach(time => {
@@ -70,29 +116,40 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
             });
         });
         setHealthData(newHealthData);
+        const healthDataPromises = Object.entries(newHealthData).map(([date, data]) => api.saveHealthData(currentUser.username, date, data));
+
 
         const newStandardPattern = { ...standardPattern };
         Object.keys(newStandardPattern).forEach(time => {
             newStandardPattern[time] = newStandardPattern[time].filter(m => m !== medToDelete);
         });
         setStandardPattern(newStandardPattern);
+        
+        await Promise.all([
+            api.saveMedications(currentUser.username, newMeds),
+            api.saveStandardPattern(currentUser.username, newStandardPattern),
+            ...healthDataPromises
+        ]);
     };
 
-    const updateStandardPattern = (pattern: StandardPattern) => {
+    const updateStandardPattern = async (pattern: StandardPattern) => {
+        if (!currentUser) return;
         setStandardPattern(pattern);
+        await api.saveStandardPattern(currentUser.username, pattern);
     };
-    
+
     const value = {
-        isAuthenticated,
+        currentUser,
         login,
         logout,
         healthData,
-        updateHealthData,
         medications,
+        standardPattern,
+        isLoading,
+        updateHealthData,
         addMedication,
         editMedication,
         deleteMedication,
-        standardPattern,
         updateStandardPattern,
     };
 

@@ -1,4 +1,3 @@
-
 import React from 'react';
 import { format, startOfMonth, endOfMonth, eachDayOfInterval, getDay, addMonths, subMonths, isSameDay, isToday } from 'date-fns';
 import { es } from 'date-fns/locale';
@@ -9,7 +8,7 @@ interface CalendarProps {
     currentDate: Date;
     setCurrentDate: (date: Date) => void;
     selectedDate: Date | null;
-    setSelectedDate: (date: Date | null) => void;
+    setSelectedDate: (date: Date) => void;
 }
 
 const WEEK_DAYS = ['Lu', 'Ma', 'Mi', 'Ju', 'Vi', 'Sá', 'Do'];
@@ -20,15 +19,14 @@ export default function Calendar({ currentDate, setCurrentDate, selectedDate, se
     const endDate = endOfMonth(currentDate);
     const daysInMonth = eachDayOfInterval({ start: startDate, end: endDate });
 
-    // The getDay function returns 0 for Sunday, 1 for Monday, etc.
-    // We want Monday to be the first day (index 0).
     const startingDayIndex = (getDay(startDate) + 6) % 7;
 
     const prevMonth = () => setCurrentDate(subMonths(currentDate, 1));
     const nextMonth = () => setCurrentDate(addMonths(currentDate, 1));
     const today = () => {
-        setCurrentDate(new Date());
-        setSelectedDate(new Date());
+        const now = new Date();
+        setCurrentDate(now);
+        setSelectedDate(now);
     }
 
     return (
