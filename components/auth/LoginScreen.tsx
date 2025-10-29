@@ -17,6 +17,13 @@ export default function LoginScreen() {
         setError('');
         setIsLoading(true);
 
+        // Add validation for password length during signup
+        if (mode === 'signup' && password.length < 6) {
+            setError('La contraseña debe tener al menos 6 caracteres.');
+            setIsLoading(false);
+            return;
+        }
+
         // Supabase requires a valid email for username
         const usernameAsEmail = `${email}@health-monitor.local`;
 
