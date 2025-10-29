@@ -1,8 +1,8 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { useAppContext } from '../../context/AppContext';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, ReferenceDot } from 'recharts';
 import { Pill, MessageSquare } from 'lucide-react';
-import type { DailyData } from '../../types';
+import type { DailyData, TimeSlotData } from '../../types';
 
 interface DataDisplayProps {
     selectedDate: string;
@@ -44,25 +44,44 @@ export default function DataDisplay({ selectedDate }: DataDisplayProps) {
     const { healthData } = useAppContext();
     const dailyData = healthData[selectedDate];
 
-    const hasAnyData = dailyData && Object.values(dailyData).some(d => d.value !== null || d.medications.length > 0 || d.comments);
+    // FIX: Normalize dailyData to prevent runtime errors from partial data objects.
+    // This ensures every time slot object has the complete TimeSlotData structure.
+    const normalizedDailyData = useMemo(() => {
+        if (!dailyData) return null;
+        
+        const defaultTimeSlotData: TimeSlotData = { value: null, medications: [], comments: '' };
+        const normalized: DailyData = {};
+
+        for (const time in dailyData) {
+            if (Object.prototype.hasOwnProperty.call(dailyData, time)) {
+                const slotData = dailyData[time] && typeof dailyData[time] === 'object' ? dailyData[time] : {};
+                normalized[time] = { ...defaultTimeSlotData, ...slotData };
+            }
+        }
+        return normalized;
+    }, [dailyData]);
+
+
+    const hasAnyData = normalizedDailyData && Object.values(normalizedDailyData).some((d: TimeSlotData) => d.value !== null || d.medications.length > 0 || !!d.comments);
 
     if (!hasAnyData) {
         return <div className="flex items-center justify-center h-96 text-slate-500">No hay datos registrados para este día.</div>;
     }
     
-    const hasNumericData = dailyData && Object.values(dailyData).some(d => d.value !== null);
+    const hasNumericData = Object.values(normalizedDailyData).some((d: TimeSlotData) => d.value !== null);
 
     // If there is data, but none of it is numeric for the chart, render a list view instead.
     if (!hasNumericData) {
-        const entriesWithData = Object.entries(dailyData)
-            .filter(([, data]) => data.medications.length > 0 || data.comments)
+        const entriesWithData = Object.entries(normalizedDailyData)
+            .filter(([, data]) => data.medications.length > 0 || !!data.comments)
             .sort(([timeA], [timeB]) => timeA.localeCompare(timeB));
 
         return (
             <div className="p-4">
                  <div className="flex items-center justify-center text-center h-16 text-slate-500">No hay datos de valor numérico para mostrar en el gráfico, pero se encontraron los siguientes registros.</div>
                  <div className="max-h-[50vh] overflow-y-auto mt-4 space-y-3">
-                     {entriesWithData.map(([time, data]) => (
+                     {entriesWithData.map(([time, data]) => {
+                        return (
                          <div key={time} className="p-3 bg-slate-50 rounded-lg flex items-start gap-4">
                              <span className="font-bold text-slate-700 w-16 pt-0.5">{time}</span>
                              <div className="flex-1 space-y-2">
@@ -80,14 +99,15 @@ export default function DataDisplay({ selectedDate }: DataDisplayProps) {
                                  )}
                              </div>
                          </div>
-                     ))}
+                        )
+                     })}
                  </div>
             </div>
         )
     }
 
-    const chartData: ChartDataPoint[] = Object.entries(dailyData)
-        .map(([time, data]) => ({
+    const chartData: ChartDataPoint[] = Object.entries(normalizedDailyData)
+        .map(([time, data]: [string, TimeSlotData]) => ({
             time,
             value: data.value,
             medications: data.medications,

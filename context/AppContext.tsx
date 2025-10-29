@@ -6,7 +6,12 @@ import { AuthChangeEvent, Session } from '@supabase/supabase-js';
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
-export const AppProvider = ({ children }: { children: ReactNode }) => {
+// FIX: Define props in a type alias for clarity and to potentially help with type inference.
+type AppProviderProps = {
+    children: ReactNode;
+};
+
+export const AppProvider = ({ children }: AppProviderProps) => {
     const [currentUser, setCurrentUser] = useState<User | null>(null);
     const [healthData, setHealthData] = useState<HealthData>({});
     const [medications, setMedications] = useState<string[]>([]);

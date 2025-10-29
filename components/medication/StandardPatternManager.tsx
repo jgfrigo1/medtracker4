@@ -24,7 +24,8 @@ export default function StandardPatternManager() {
     const handleSave = async () => {
         setIsSaving(true);
         // Clean up empty entries before saving
-        const cleanedPattern = Object.entries(pattern).reduce((acc, [time, meds]) => {
+        // FIX: Explicitly type the parameters `time` and `meds` to resolve 'unknown' type errors.
+        const cleanedPattern = Object.entries(pattern).reduce((acc, [time, meds]: [string, string[]]) => {
             if (meds && meds.length > 0) {
                 acc[time] = meds;
             }

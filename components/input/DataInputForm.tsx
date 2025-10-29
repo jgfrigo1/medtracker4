@@ -92,40 +92,44 @@ export default function DataInputForm({ selectedDate }: DataInputFormProps) {
                         </tr>
                     </thead>
                     <tbody>
-                        {TIME_SLOTS.map(time => (
-                            <tr key={time} className="bg-white border-b border-slate-200 hover:bg-slate-50">
-                                <td className="px-3 py-2 font-medium text-slate-900">{time}</td>
-                                <td className="px-3 py-2">
-                                    <input
-                                        type="number"
-                                        min="0"
-                                        max="10"
-                                        step="1"
-                                        value={dailyData[time]?.value ?? ''}
-                                        onChange={(e) => handleValueChange(time, 'value', e.target.value === '' ? null : Number(e.target.value))}
-                                        className="w-full p-2 border border-slate-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
-                                    />
-                                </td>
-                                <td className="px-3 py-2">
-                                     <select
-                                        multiple
-                                        value={dailyData[time]?.medications || []}
-                                        onChange={(e) => handleMedicationChange(time, Array.from(e.target.selectedOptions, option => option.value))}
-                                        className="w-full p-2 border border-slate-300 rounded-md focus:ring-blue-500 focus:border-blue-500 h-24"
-                                    >
-                                        {medications.map(med => <option key={med} value={med}>{med}</option>)}
-                                    </select>
-                                </td>
-                                <td className="px-3 py-2">
-                                    <textarea
-                                        value={dailyData[time]?.comments || ''}
-                                        onChange={(e) => handleValueChange(time, 'comments', e.target.value)}
-                                        className="w-full p-2 border border-slate-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
-                                        rows={3}
-                                    />
-                                </td>
-                            </tr>
-                        ))}
+                        {/* FIX: Use a block to create a typed variable for the time slot data, resolving 'unknown' type errors on its properties. */}
+                        {TIME_SLOTS.map(time => {
+                            const timeData = dailyData[time];
+                            return (
+                                <tr key={time} className="bg-white border-b border-slate-200 hover:bg-slate-50">
+                                    <td className="px-3 py-2 font-medium text-slate-900">{time}</td>
+                                    <td className="px-3 py-2">
+                                        <input
+                                            type="number"
+                                            min="0"
+                                            max="10"
+                                            step="1"
+                                            value={timeData.value ?? ''}
+                                            onChange={(e) => handleValueChange(time, 'value', e.target.value === '' ? null : Number(e.target.value))}
+                                            className="w-full p-2 border border-slate-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
+                                        />
+                                    </td>
+                                    <td className="px-3 py-2">
+                                        <select
+                                            multiple
+                                            value={timeData.medications}
+                                            onChange={(e) => handleMedicationChange(time, Array.from(e.target.selectedOptions, option => option.value))}
+                                            className="w-full p-2 border border-slate-300 rounded-md focus:ring-blue-500 focus:border-blue-500 h-24"
+                                        >
+                                            {medications.map(med => <option key={med} value={med}>{med}</option>)}
+                                        </select>
+                                    </td>
+                                    <td className="px-3 py-2">
+                                        <textarea
+                                            value={timeData.comments}
+                                            onChange={(e) => handleValueChange(time, 'comments', e.target.value)}
+                                            className="w-full p-2 border border-slate-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
+                                            rows={3}
+                                        />
+                                    </td>
+                                </tr>
+                            )
+                        })}
                     </tbody>
                 </table>
             </div>

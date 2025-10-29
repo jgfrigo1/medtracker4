@@ -3,6 +3,7 @@ import { format, startOfMonth, endOfMonth, eachDayOfInterval, getDay, addMonths,
 import { es } from 'date-fns/locale';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { useAppContext } from '../../context/AppContext';
+import type { TimeSlotData, DailyData } from '../../types';
 
 interface CalendarProps {
     currentDate: Date;
@@ -46,7 +47,13 @@ export default function Calendar({ currentDate, setCurrentDate, selectedDate, se
                 {Array.from({ length: startingDayIndex }).map((_, index) => <div key={`empty-${index}`} />)}
                 {daysInMonth.map(day => {
                     const dayFormatted = format(day, 'yyyy-MM-dd');
-                    const hasData = healthData[dayFormatted] && Object.values(healthData[dayFormatted]).some(d => d.value !== null || d.medications.length > 0 || d.comments);
+                    const dayData = healthData[dayFormatted];
+                    // FIX: Make data checks robust against partial or malformed data from the database.
+                    // This prevents crashes when accessing properties like 'medications' on objects
+                    // that may not have them.
+                    const hasData = dayData && Object.values(dayData).some((d: Partial<TimeSlotData> | null) =>
+                        d && (d.value != null || (Array.isArray(d.medications) && d.medications.length > 0) || !!d.comments)
+                    );
                     const isSelected = selectedDate && isSameDay(day, selectedDate);
                     const isCurrentToday = isToday(day);
                     
