@@ -16,8 +16,7 @@ export interface User {
 
 export interface AppContextType {
     currentUser: User | null;
-    login: (username: string, password: string) => Promise<string | null>;
-    signup: (username: string, password: string) => Promise<string | null>;
+    login: (password: string) => Promise<string | null>;
     logout: () => void;
     healthData: HealthData;
     medications: string[];
@@ -28,4 +27,5 @@ export interface AppContextType {
     editMedication: (oldMed: string, newMed: string) => Promise<void>;
     deleteMedication: (med: string) => Promise<void>;
     updateStandardPattern: (pattern: StandardPattern) => Promise<void>;
+    importData: (data: { healthData: HealthData, medications: string[], standardPattern: StandardPattern }) => Promise<void>;
 }

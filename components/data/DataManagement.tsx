@@ -1,17 +1,17 @@
 import React, { useState } from 'react';
 import { useAppContext } from '../../context/AppContext';
-import { api } from '../../services/api';
 import { Download, Upload, AlertTriangle } from 'lucide-react';
 import { format } from 'date-fns';
+import type { HealthData, StandardPattern } from '../../types';
 
 interface UserDataBundle {
-    healthData: unknown;
-    medications: unknown;
-    standardPattern: unknown;
+    healthData: HealthData;
+    medications: string[];
+    standardPattern: StandardPattern;
 }
 
 export default function DataManagement() {
-    const { currentUser } = useAppContext();
+    const { currentUser, healthData, medications, standardPattern, importData } = useAppContext();
     const [isExporting, setIsExporting] = useState(false);
     const [isImporting, setIsImporting] = useState(false);
     const [selectedFile, setSelectedFile] = useState<File | null>(null);
@@ -23,13 +23,13 @@ export default function DataManagement() {
         if (!currentUser) return;
         setIsExporting(true);
         try {
-            const data = await api.exportUserData();
+            const data = { healthData, medications, standardPattern };
             const jsonString = JSON.stringify(data, null, 2);
             const blob = new Blob([jsonString], { type: 'application/json' });
             const url = URL.createObjectURL(blob);
             const link = document.createElement('a');
             const date = format(new Date(), 'yyyy-MM-dd');
-            link.download = `health_monitor_data_${currentUser.username}_${date}.json`;
+            link.download = `health_monitor_data_${date}.json`;
             link.href = url;
             document.body.appendChild(link);
             link.click();
@@ -46,6 +46,7 @@ export default function DataManagement() {
         setImportError('');
         setImportSuccess('');
         setParsedData(null);
+        setSelectedFile(null);
         const file = event.target.files?.[0];
         if (file) {
             if (file.type !== 'application/json') {
@@ -57,7 +58,6 @@ export default function DataManagement() {
             reader.onload = (e) => {
                 try {
                     const result = JSON.parse(e.target?.result as string);
-                    // Basic validation
                     if ('healthData' in result && 'medications' in result && 'standardPattern' in result) {
                         setParsedData(result);
                     } else {
@@ -75,24 +75,18 @@ export default function DataManagement() {
         if (!parsedData || !currentUser) return;
 
         const confirmation = window.confirm(
-            '¿Está seguro de que desea importar estos datos?\n\nATENCIÓN: Esta acción sobrescribirá permanentemente todos los datos de salud, medicamentos y patrones existentes para su usuario. Esta acción no se puede deshacer.'
+            '¿Está seguro de que desea importar estos datos?\n\nATENCIÓN: Esta acción sobrescribirá permanentemente todos los datos de salud, medicamentos y patrones existentes. Esta acción no se puede deshacer.'
         );
 
         if (confirmation) {
             setIsImporting(true);
             setImportError('');
             try {
-                // The API expects a specific shape, but we validated the keys exist.
-                // We cast to `any` to satisfy the type-checker for the import function.
-                const success = await api.importUserData(parsedData as any);
-                if (success) {
-                    setImportSuccess('Datos importados con éxito. La aplicación se recargará para aplicar los cambios.');
-                    setTimeout(() => {
-                        window.location.reload();
-                    }, 3000);
-                } else {
-                    throw new Error("API returned failure");
-                }
+                await importData(parsedData);
+                setImportSuccess('Datos importados con éxito. La aplicación se recargará para aplicar los cambios.');
+                setTimeout(() => {
+                    window.location.reload();
+                }, 3000);
             } catch (error) {
                 console.error("Failed to import data", error);
                 setImportError('Ocurrió un error inesperado durante la importación.');
@@ -133,7 +127,7 @@ export default function DataManagement() {
                         <div>
                             <p className="font-bold text-red-700">Atención</p>
                             <p className="text-sm text-red-600">
-                                La importación de datos <strong className="font-semibold">sobrescribirá permanentemente</strong> todos los datos existentes para su usuario.
+                                La importación de datos <strong className="font-semibold">sobrescribirá permanentemente</strong> todos los datos existentes.
                             </p>
                         </div>
                     </div>
