@@ -1,36 +1,52 @@
-import React, { createContext, useContext, ReactNode, useState } from 'react';
-import type { AppContextType, HealthData, StandardPattern, DailyData, User } from '../types';
+import React, { createContext, useContext, ReactNode, useState, useEffect } from 'react';
 import { useLocalStorage } from '../hooks/useLocalStorage';
+import type { AppContextType, HealthData, StandardPattern, DailyData, User } from '../types';
+import { LOCAL_STORAGE_KEYS } from '../constants';
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
+
+// Simple password for local authentication. In a real app, this would be handled more securely.
+const APP_PASSWORD = 'password123';
+const USER_DATA_KEY = 'healthTracker_userData';
 
 type AppProviderProps = {
     children: ReactNode;
 };
 
-export const AppProvider = ({ children }: AppProviderProps) => {
-    const [isAuthenticated, setIsAuthenticated] = useLocalStorage('healthTracker_isAuthenticated', false);
-    const [healthData, setHealthData] = useLocalStorage<HealthData>('healthTracker_healthData', {});
-    const [medications, setMedications] = useLocalStorage<string[]>('healthTracker_medications', []);
-    const [standardPattern, setStandardPattern] = useLocalStorage<StandardPattern>('healthTracker_standardPattern', {});
-    const [isLoading, setIsLoading] = useState(false);
+interface UserDataBundle {
+    healthData: HealthData;
+    medications: string[];
+    standardPattern: StandardPattern;
+}
 
-    const currentUser = isAuthenticated ? { username: 'Usuario' } : null;
+export const AppProvider = ({ children }: AppProviderProps) => {
+    const [isAuthenticated, setIsAuthenticated] = useLocalStorage<boolean>(LOCAL_STORAGE_KEYS.IS_AUTHENTICATED, false);
+    
+    const [userData, setUserData] = useLocalStorage<UserDataBundle>(USER_DATA_KEY, {
+        healthData: {},
+        medications: ['Medicina A', 'Medicina B'], // Example starting data
+        standardPattern: {}
+    });
+
+    const [isLoading, setIsLoading] = useState(true);
+
+    useEffect(() => {
+        // We just need to remove the initial loading state
+        setIsLoading(false);
+    }, []);
+    
+    const currentUser: User | null = isAuthenticated ? { username: 'Usuario' } : null;
 
     const login = async (password: string): Promise<string | null> => {
         setIsLoading(true);
-        // Simulate async operation
-        return new Promise(resolve => {
-            setTimeout(() => {
-                if (password === 'josep') {
-                    setIsAuthenticated(true);
-                    resolve(null);
-                } else {
-                    resolve('Contraseña incorrecta.');
-                }
-                setIsLoading(false);
-            }, 500);
-        });
+        if (password === APP_PASSWORD) {
+            setIsAuthenticated(true);
+            setIsLoading(false);
+            return null; // Successful login
+        } else {
+            setIsLoading(false);
+            return 'Contraseña incorrecta.'; // Failed login
+        }
     };
 
     const logout = () => {
@@ -38,89 +54,100 @@ export const AppProvider = ({ children }: AppProviderProps) => {
     };
 
     const updateHealthData = async (date: string, data: DailyData) => {
-        setHealthData(prevData => ({ ...prevData, [date]: data }));
+        setUserData(prev => ({
+            ...prev,
+            healthData: { ...prev.healthData, [date]: data }
+        }));
     };
-    
+
     const addMedication = async (med: string) => {
-        if (!medications.includes(med)) {
-            setMedications(prev => [...prev, med].sort());
+        if (!userData.medications.includes(med)) {
+            setUserData(prev => ({
+                ...prev,
+                medications: [...prev.medications, med].sort()
+            }));
         }
     };
 
     const editMedication = async (oldMed: string, newMed: string) => {
-        // This logic ensures data consistency across all local storage entries
-        setMedications(prev => prev.map(m => m === oldMed ? newMed : m).sort());
-        
-        setStandardPattern(prev => {
-            const newPattern: StandardPattern = {};
-            for (const time in prev) {
-                newPattern[time] = prev[time].map(m => m === oldMed ? newMed : m);
-            }
-            return newPattern;
-        });
-
-        setHealthData(prev => {
-            const newData: HealthData = {};
-            for (const date in prev) {
-                newData[date] = {};
-                for (const time in prev[date]) {
-                    newData[date][time] = {
-                        ...prev[date][time],
-                        medications: prev[date][time].medications.map(m => m === oldMed ? newMed : m)
+        setUserData(prev => {
+            const newHealthData: HealthData = {};
+            for (const date in prev.healthData) {
+                newHealthData[date] = {};
+                for (const time in prev.healthData[date]) {
+                    newHealthData[date][time] = {
+                        ...prev.healthData[date][time],
+                        medications: prev.healthData[date][time].medications.map(m => (m === oldMed ? newMed : m))
                     };
                 }
             }
-            return newData;
+
+            const newStandardPattern: StandardPattern = {};
+            for (const time in prev.standardPattern) {
+                newStandardPattern[time] = prev.standardPattern[time].map(m => (m === oldMed ? newMed : m));
+            }
+            
+            return {
+                ...prev,
+                medications: prev.medications.map(m => (m === oldMed ? newMed : m)).sort(),
+                healthData: newHealthData,
+                standardPattern: newStandardPattern
+            };
         });
     };
 
     const deleteMedication = async (medToDelete: string) => {
-        // This logic ensures data consistency across all local storage entries
-        setMedications(prev => prev.filter(m => m !== medToDelete));
-        
-        setStandardPattern(prev => {
-            const newPattern: StandardPattern = {};
-            for (const time in prev) {
-                const filteredMeds = prev[time].filter(m => m !== medToDelete);
-                if (filteredMeds.length > 0) {
-                    newPattern[time] = filteredMeds;
-                }
-            }
-            return newPattern;
-        });
-
-        setHealthData(prev => {
-            const newData: HealthData = {};
-            for (const date in prev) {
-                newData[date] = {};
-                for (const time in prev[date]) {
-                    newData[date][time] = {
-                        ...prev[date][time],
-                        medications: prev[date][time].medications.filter(m => m !== medToDelete)
+         setUserData(prev => {
+            const newHealthData: HealthData = {};
+            for (const date in prev.healthData) {
+                newHealthData[date] = {};
+                for (const time in prev.healthData[date]) {
+                    newHealthData[date][time] = {
+                        ...prev.healthData[date][time],
+                        medications: prev.healthData[date][time].medications.filter(m => m !== medToDelete)
                     };
                 }
             }
-            return newData;
+            
+            const newStandardPattern: StandardPattern = {};
+            for (const time in prev.standardPattern) {
+                const filteredMeds = prev.standardPattern[time].filter(m => m !== medToDelete);
+                if (filteredMeds.length > 0) {
+                    newStandardPattern[time] = filteredMeds;
+                }
+            }
+            
+            return {
+                ...prev,
+                medications: prev.medications.filter(m => m !== medToDelete),
+                healthData: newHealthData,
+                standardPattern: newStandardPattern
+            };
         });
     };
-
+    
     const updateStandardPattern = async (pattern: StandardPattern) => {
-        setStandardPattern(pattern);
+        setUserData(prev => ({
+            ...prev,
+            standardPattern: pattern
+        }));
     };
-
+    
     const importData = async (data: { healthData: HealthData, medications: string[], standardPattern: StandardPattern }) => {
-        setHealthData(data.healthData || {});
-        setMedications(data.medications || []);
-        setStandardPattern(data.standardPattern || {});
+        setUserData({
+            healthData: data.healthData || {},
+            medications: data.medications || [],
+            standardPattern: data.standardPattern || {}
+        });
     };
 
     const value: AppContextType = {
         currentUser,
         login,
         logout,
-        healthData,
-        medications,
-        standardPattern,
+        healthData: userData.healthData,
+        medications: userData.medications,
+        standardPattern: userData.standardPattern,
         isLoading,
         updateHealthData,
         addMedication,
